@@ -448,25 +448,42 @@ const globe = {
     if (!c) return;
     c.clearRect(0, 0, this.cx * 2, this.cy * 2);
 
-    const g = c.createRadialGradient(this.cx - R*.35, this.cy - R*.4, R*.1, this.cx, this.cy, R);
-    g.addColorStop(0, "#eaf4fd"); g.addColorStop(.55, getCSS("--sea")); g.addColorStop(1, getCSS("--sea2"));
+    // Atmosphere: a soft halo just outside the sphere, so the edge glows instead of stopping dead.
+    const air = c.createRadialGradient(this.cx, this.cy, R * .97, this.cx, this.cy, R * 1.09);
+    air.addColorStop(0, "rgba(96,156,214,.30)");
+    air.addColorStop(.5, "rgba(96,156,214,.12)");
+    air.addColorStop(1, "rgba(96,156,214,0)");
+    c.beginPath(); c.arc(this.cx, this.cy, R * 1.09, 0, 7); c.fillStyle = air; c.fill();
+
+    // Ocean, lit from the upper left.
+    const g = c.createRadialGradient(this.cx - R*.38, this.cy - R*.42, R*.05, this.cx, this.cy, R*1.04);
+    g.addColorStop(0, "#f2f9ff");
+    g.addColorStop(.35, getCSS("--sea"));
+    g.addColorStop(.78, getCSS("--sea2"));
+    g.addColorStop(1, "#9dc0e0");
     c.beginPath(); c.arc(this.cx, this.cy, R, 0, 7); c.fillStyle = g; c.fill();
 
     c.save(); c.beginPath(); c.arc(this.cx, this.cy, R, 0, 7); c.clip();
 
-    c.strokeStyle = "rgba(255,255,255,.75)"; c.lineWidth = 1;
     for (let lat = -60; lat <= 60; lat += 30){
-      const pts = []; for (let lon = -180; lon <= 180; lon += 4) pts.push([lat, lon]);
-      this.line(pts, "rgba(255,255,255,.8)", 1);
+      const pts = []; for (let lon = -180; lon <= 180; lon += 3) pts.push([lat, lon]);
+      this.line(pts, "rgba(255,255,255,.55)", .8);
     }
     for (let lon = -180; lon < 180; lon += 30){
-      const pts = []; for (let lat = -90; lat <= 90; lat += 4) pts.push([lat, lon]);
-      this.line(pts, "rgba(255,255,255,.8)", 1);
+      const pts = []; for (let lat = -88; lat <= 88; lat += 3) pts.push([lat, lon]);
+      this.line(pts, "rgba(255,255,255,.55)", .8);
     }
 
     if (this.land){
-      c.fillStyle = getCSS("--land");
+      // Land sits slightly proud of the water: lit at the top, darker at the bottom, soft shadow.
+      const lg = c.createLinearGradient(0, this.cy - R, 0, this.cy + R);
+      lg.addColorStop(0, "#c6d4e0");
+      lg.addColorStop(.45, getCSS("--land"));
+      lg.addColorStop(1, "#9db0c0");
+      c.save();
+      c.fillStyle = lg;
       c.strokeStyle = getCSS("--landline"); c.lineWidth = .6;
+      c.shadowColor = "rgba(10,28,48,.28)"; c.shadowBlur = 4; c.shadowOffsetY = 1;
       this.land.forEach(poly => poly.forEach(ring => {
         let visible = false;
         c.beginPath();
@@ -476,18 +493,25 @@ const globe = {
           if (i) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
         });
         c.closePath();
-        if (visible){ c.fill(); c.stroke(); }
+        if (visible){ c.fill(); c.shadowColor = "transparent"; c.stroke();
+                      c.shadowColor = "rgba(10,28,48,.28)"; }
       }));
+      c.restore();
     }
 
     const walkedPts = [], restPts = [];
     ROUTE.forEach(p => { (p.at <= this.walked ? walkedPts : restPts).push(p.ll); });
     if (walkedPts.length && restPts.length) restPts.unshift(walkedPts[walkedPts.length - 1]);
-    this.line(restPts, "rgba(21,32,43,.28)", 2, [3, 4]);
+    this.line(restPts, "rgba(21,32,43,.26)", 1.8, [2.5, 4]);
 
     c.save();
-    c.shadowColor = "rgba(19,100,196,.5)"; c.shadowBlur = 8;
+    // A wide soft pass under the crisp line gives the walked route some lift off the surface.
+    c.shadowColor = "rgba(19,100,196,.55)"; c.shadowBlur = 10;
+    this.line(walkedPts, "rgba(19,100,196,.35)", 6);
+    c.shadowBlur = 6;
     this.line(walkedPts, getCSS("--accent"), 3.2);
+    c.shadowColor = "transparent";
+    this.line(walkedPts, "rgba(255,255,255,.45)", 1);
     c.restore();
 
     const heading = positionAt(this.walked).nextIndex;
@@ -517,9 +541,25 @@ const globe = {
       }
     }
 
+    // Limb darkening, then a specular highlight: the two cues that read as "sphere" not "disc".
+    const limb = c.createRadialGradient(this.cx, this.cy, R * .55, this.cx, this.cy, R);
+    limb.addColorStop(0, "rgba(10,30,60,0)");
+    limb.addColorStop(.82, "rgba(10,30,60,.07)");
+    limb.addColorStop(1, "rgba(8,26,54,.28)");
+    c.beginPath(); c.arc(this.cx, this.cy, R, 0, 7); c.fillStyle = limb; c.fill();
+
+    const shine = c.createRadialGradient(this.cx - R*.42, this.cy - R*.46, 0,
+                                         this.cx - R*.42, this.cy - R*.46, R*.75);
+    shine.addColorStop(0, "rgba(255,255,255,.30)");
+    shine.addColorStop(1, "rgba(255,255,255,0)");
+    c.beginPath(); c.arc(this.cx, this.cy, R, 0, 7); c.fillStyle = shine; c.fill();
+
     c.restore();
+
+    c.beginPath(); c.arc(this.cx, this.cy, R - .5, 0, 7);
+    c.strokeStyle = "rgba(255,255,255,.5)"; c.lineWidth = 1; c.stroke();
     c.beginPath(); c.arc(this.cx, this.cy, R, 0, 7);
-    c.strokeStyle = "rgba(21,32,43,.18)"; c.lineWidth = 1; c.stroke();
+    c.strokeStyle = "rgba(21,45,78,.22)"; c.lineWidth = 1; c.stroke();
   },
 
   setProgress(dist, autoCentre){
