@@ -301,7 +301,9 @@ const finishLine = () => CONFIG.target > 0 ? CONFIG.target : JOURNEY_END;
 // Where the walkers have reached, as [lat, lon], plus the stop they are heading for.
 function positionAt(dist){
   if (!STOPS.length) return {pos: null, nextIndex: -1, doneCount: 0};
-  if (dist <= 0) return {pos: [STOPS[0].lat, STOPS[0].lon], nextIndex: 1, doneCount: 1};
+  // `!(dist > 0)` also catches NaN, which would otherwise fall through as "journey finished".
+  if (!(dist > 0)) return {pos: [STOPS[0].lat, STOPS[0].lon],
+                           nextIndex: STOPS.length > 1 ? 1 : -1, doneCount: 1};
   for (let i = 1; i < STOPS.length; i++){
     if (dist < STOPS[i].at){
       const a = STOPS[i-1], b = STOPS[i];
@@ -627,7 +629,7 @@ function renderStops(dist){
   }).join("");
   $("stopcount").textContent = reached + " of " + STOPS.length + " reached";
 
-  if (nextIndex < 0){
+  if (nextIndex < 0 || !STOPS[nextIndex]){
     $("next").innerHTML = '<span class="lbl">Journey complete</span>' +
       '<span class="city">' + (LOOP ? "All the way round" : STOPS[STOPS.length - 1].name) + '</span>' +
       '<span class="togo">' + (LOOP
