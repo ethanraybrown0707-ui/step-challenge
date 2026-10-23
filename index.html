@@ -37,7 +37,8 @@ h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.012em}
 .cols{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:28px;padding:20px 0 2px;
   align-items:center}
 .dist{font-size:clamp(42px,7.5vw,64px);font-weight:700;line-height:1;letter-spacing:-.035em;
-  font-variant-numeric:tabular-nums}
+  font-variant-numeric:tabular-nums;max-width:100%;overflow-wrap:anywhere}
+.dist.long{font-size:clamp(26px,5vw,44px)}   /* an absurd total must not burst the card */
 .unit{font-size:clamp(17px,2.6vw,22px);font-weight:500;color:var(--muted);margin-left:8px;
   letter-spacing:-.01em}
 .caption{margin:10px 0 0;color:var(--muted);font-size:14.5px}
@@ -169,6 +170,7 @@ const CONFIG = {
   units:        "miles",  // "miles" or "km"
   target:       0,        // 0 = the finish line is the last stop below
   refreshSeconds: 45,     // how often it re-reads the sheet (Google's own cache adds a few minutes)
+  maxStepsPerEntry: 200000, // one entry above this is ignored as a typo (0 = count everything)
   // One lap of the planet, heading east and ending where it started.
   // Add, remove or reorder stops — the distances work themselves out.
   journey: [
@@ -231,18 +233,21 @@ function totals(table){
   const si = findCol(table.headers, CONFIG.stepsHeader, ["step"]);
   if (si < 0) throw new Error("no column heading mentions “steps”");
   const ni = findCol(table.headers, CONFIG.nameHeader, ["name", "walker", "who"]);
-  let steps = 0, entries = 0;
+  let steps = 0, entries = 0, ignored = 0;
   const people = new Set();
+  const cap = CONFIG.maxStepsPerEntry;
   table.rows.forEach(r => {
     const v = Number(String(r[si] == null ? "" : r[si]).replace(/[^0-9.\-]/g, ""));
     if (!isFinite(v) || v <= 0) return;
+    // A single impossible figure would otherwise finish the journey on its own.
+    if (cap > 0 && v > cap){ ignored++; return; }
     steps += v; entries++;
     if (ni >= 0){
       const n = String(r[ni] == null ? "" : r[ni]).trim().toLowerCase();
       if (n) people.add(n);
     }
   });
-  return {steps, entries, walkers: people.size || entries, named: ni >= 0};
+  return {steps, entries, ignored, walkers: people.size || entries, named: ni >= 0};
 }
 
 function loadCsv(){
@@ -603,6 +608,7 @@ function render(t){
   const left = goal - dist;
 
   animate($("dist"), dist, 1);
+  $("dist").parentElement.classList.toggle("long", fmt(dist, 1).length > 12);
   $("caption").innerHTML = left > 0
     ? "<b>" + fmt(pct, pct > 0 && pct < 10 ? 1 : 0) + "%</b> of the way · " +
       fmt(left, 1) + " " + CONFIG.units + " still to walk"
@@ -641,10 +647,17 @@ function load(){
   loadCsv()
     .then(table => {
       const t = totals(table);
-      $("note").classList.add("hide");
       const changed = !shown || t.steps !== shown.steps || t.walkers !== shown.walkers ||
-                      t.entries !== shown.entries;
+                      t.entries !== shown.entries || t.ignored !== shown.ignored;
       if (changed){ shown = t; render(t); }
+      if (t.ignored){
+        note("<b>" + fmt(t.ignored) + (t.ignored === 1 ? " entry is" : " entries are") +
+             " not counted</b> — over " + fmt(CONFIG.maxStepsPerEntry) +
+             " steps in one go, which is almost always a typo. Correct the row in the sheet " +
+             "and it will count within a minute.");
+      } else {
+        $("note").classList.add("hide");
+      }
       shownAt = clockTime();
       stamp("Updated " + shownAt);
     })
