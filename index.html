@@ -28,6 +28,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--sans
 h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.012em}
 .route{margin:3px 0 0;color:var(--muted);font-size:13.5px}
 .updated{font-family:var(--mono);font-size:11.5px;color:var(--faint);letter-spacing:.01em}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#2fa36b;
+  margin-right:6px;vertical-align:middle}
+.dot.stale{background:#d0a132}
+@media(prefers-reduced-motion:no-preference){.dot{animation:pulse 2.6s ease-in-out infinite}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 .cols{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:28px;padding:20px 0 2px;
   align-items:center}
@@ -163,7 +168,7 @@ const CONFIG = {
   stepsPerMile: 2000,
   units:        "miles",  // "miles" or "km"
   target:       0,        // 0 = the finish line is the last stop below
-  refreshMinutes: 5,
+  refreshSeconds: 45,     // how often it re-reads the sheet (Google's own cache adds a few minutes)
   // One lap of the planet, heading east and ending where it started.
   // Add, remove or reorder stops — the distances work themselves out.
   journey: [
@@ -613,9 +618,17 @@ function render(t){
 
   renderStops(dist);
   globe.setProgress(dist, true);
-  $("updated").textContent = "Updated " +
-    new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
 }
+
+// The figures currently on screen, so a poll that brings nothing new leaves the page alone
+// instead of re-animating every number.
+let shown = null, shownAt = "";
+
+function stamp(text, stale){
+  $("updated").innerHTML = '<i class="dot' + (stale ? ' stale' : '') + '"></i>' + text;
+}
+
+const clockTime = () => new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
 
 function load(){
   if (!CONFIG.csvUrl){
@@ -626,11 +639,20 @@ function load(){
     return;
   }
   loadCsv()
-    .then(table => { $("note").classList.add("hide"); render(totals(table)); })
+    .then(table => {
+      const t = totals(table);
+      $("note").classList.add("hide");
+      const changed = !shown || t.steps !== shown.steps || t.walkers !== shown.walkers ||
+                      t.entries !== shown.entries;
+      if (changed){ shown = t; render(t); }
+      shownAt = clockTime();
+      stamp("Updated " + shownAt);
+    })
     .catch(err => {
+      // Once there are figures on screen, a failed poll must not wipe them out.
+      if (shown){ stamp("Last updated " + shownAt + " · retrying", true); return; }
       $("caption").textContent = "Couldn't read the latest totals";
-      note("<b>No totals yet:</b> " + err.message +
-           ". The page will try again in " + CONFIG.refreshMinutes + " minutes.");
+      note("<b>No totals yet:</b> " + err.message + ". The page keeps trying.");
     });
 }
 
@@ -656,6 +678,6 @@ globe.hint("");
 renderStops(0);
 globe.setProgress(0, true);
 load();
-setInterval(load, Math.max(1, CONFIG.refreshMinutes) * 60000);
+setInterval(load, Math.max(15, CONFIG.refreshSeconds) * 1000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
 </script>
