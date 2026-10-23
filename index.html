@@ -608,7 +608,7 @@ function render(t){
     ["Steps logged", fmt(t.steps)],
     [t.named ? "Walkers" : "People", fmt(t.walkers)],
     ["Entries", fmt(t.entries)],
-    ["Average each", fmt(t.steps / t.walkers / perUnit(), 1) + " " + CONFIG.units]
+    ["Average each", t.walkers ? fmt(t.steps / t.walkers / perUnit(), 1) + " " + CONFIG.units : "—"]
   ].map(p => '<div class="tile"><b>' + p[1] + '</b><span>' + p[0] + '</span></div>').join("");
 
   renderStops(dist);
